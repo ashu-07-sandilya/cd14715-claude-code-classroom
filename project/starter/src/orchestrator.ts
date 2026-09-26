@@ -9,6 +9,7 @@ import {
 import { ORCHESTRATOR_PROMPT } from './prompts/orchestrator.prompt.js';
 import { withTimeout, withRetry } from './utils/error-handler.js';
 import { ErrorCodes, ReviewError } from './utils/error-handler.js';
+import { globalRateLimiter } from './utils/rate-limiter.js';
 
 export interface OrchestratorOptions {
   model?: string;
@@ -46,7 +47,10 @@ export class CodeReviewOrchestrator {
           async () => {
             let finalResult: unknown = undefined;
 
-            for await (const message of query({
+            await globalRateLimiter.acquire(1000);
+
+            try {
+              for await (const message of query({
               prompt,
               options: {
                 model: this.model,
@@ -74,21 +78,21 @@ export class CodeReviewOrchestrator {
                 },
                 maxTurns: 20
               }
-            })) {
-              if (message.type === 'result') {
-                if (message.subtype !== 'success') {
-                  throw new ReviewError(
-                    `Review failed with subtype: ${message.subtype}`,
-                    ErrorCodes.AGENT_FAILED,
-                    { owner, repo, prNumber }
-                  );
+              })) {
+                if (message.type === 'result') {
+                  if (message.subtype !== 'success') {
+                    throw new ReviewError(
+                      `Review failed with subtype: ${message.subtype}`,
+                      ErrorCodes.AGENT_FAILED,
+                      { owner, repo, prNumber }
+                    );
+                  }
+
+                  finalResult = message.structured_output;
                 }
-
-                finalResult = message.structured_output;
               }
-            }
 
-            if (!finalResult) {
+              if (!finalResult) {
               throw new ReviewError(
                 'No structured review result was returned',
                 ErrorCodes.STRUCTURED_OUTPUT_FAILED,
@@ -108,13 +112,16 @@ export class CodeReviewOrchestrator {
               );
             }
 
-            return {
-              ...validated.data,
-              metadata: {
-                ...validated.data.metadata,
-                duration: Date.now() - startTime
-              }
-            };
+              return {
+                ...validated.data,
+                metadata: {
+                  ...validated.data.metadata,
+                  duration: Date.now() - startTime
+                }
+              };
+            } finally {
+              globalRateLimiter.release();
+            }
           },
           this.timeoutMs,
           `Code review timed out after ${this.timeoutMs}ms`
