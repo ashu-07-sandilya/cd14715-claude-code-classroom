@@ -6,6 +6,7 @@ import {
   testCoverageAnalyzer,
   refactoringSuggester
 } from './agents/index.js';
+import { ORCHESTRATOR_PROMPT } from './prompts/orchestrator.prompt.js';
 import { withTimeout, withRetry } from './utils/error-handler.js';
 import { ErrorCodes, ReviewError } from './utils/error-handler.js';
 
@@ -37,29 +38,7 @@ export class CodeReviewOrchestrator {
   ): Promise<ReviewReport> {
     const startTime = Date.now();
 
-    const prompt = `
-Review GitHub pull request ${owner}/${repo}#${prNumber}.
-
-First inspect the pull request and its changed files using the GitHub MCP server.
-
-For each relevant changed source file, perform all three analyses:
-1. Code quality analysis
-2. Test coverage analysis
-3. Refactoring analysis
-
-Run these analyses in parallel where possible.
-
-Then aggregate all results into ONE final ReviewReport.
-
-The final response MUST conform exactly to the provided ReviewReport JSON schema.
-
-The pull request information must be:
-- owner: ${owner}
-- repo: ${repo}
-- number: ${prNumber}
-
-Do not invent files or analysis results.
-`;
+    const prompt = ORCHESTRATOR_PROMPT(owner, repo, prNumber);
 
     const result = await withRetry(
       () =>
