@@ -2,6 +2,7 @@ import * as dotenv from 'dotenv';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { CodeReviewOrchestrator } from './orchestrator.js';
 import { ReportGenerator } from './utils/report-generator.js';
+import { formatError } from './utils/error-handler.js';
 
 dotenv.config();
 
@@ -105,7 +106,7 @@ async function main() {
     console.log(`🌐 HTML:     reports/${baseName}.html`);
     console.log(`📋 JSON:     reports/${baseName}.json`);
   } catch (error) {
-    console.error('❌ Review failed:', error);
+    console.error('❌ Review failed:', formatError(error));
     process.exit(1);
   }
 }
